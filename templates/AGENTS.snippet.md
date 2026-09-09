@@ -8,8 +8,10 @@
 - 派活：`bridge send --mode analyze "指示"` 或 `bridge send --mode execute "指示"`，命令会打印一个 seq。
   - `analyze`：Claude 只读，适合调研、分析、评审。
   - `execute`：Claude 可改文件、跑命令，适合实现、修 bug、跑测试。
-- 等结果：`bridge wait`（默认等最新一条指示的回复），返回的文本就是 Claude 的总结，格式固定为
-  【做了什么】【结果/结论】【待你决策】。直接依据它决策。`wait` 会阻塞直到 Claude 完成，可能需要几分钟。
+- 等结果：`bridge wait --timeout 240`（默认等最新一条指示的回复），返回的文本就是 Claude 的总结，格式固定为
+  【做了什么】【结果/结论】【待你决策】。直接依据它决策。
+  - Claude 一轮通常要 1–10 分钟。运行 `wait` 时把你的 shell 工具超时设到 300 秒以上。
+  - 退出码 4 = 还没好，直接再跑一次 `bridge wait --timeout 240`；退出码 2 = Claude 这一轮出错，正文是原因。
 - 回顾：`bridge status -n 5` 看最近几条的单行摘要和 Claude 是否在跑。
 - 只在总结不够用时，才读 `.bridge/work/NNNN-claude.md` 看完整过程。平时不要读它，也不要读 `.bridge/notebook.jsonl` 全文。
 
