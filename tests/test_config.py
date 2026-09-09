@@ -10,7 +10,7 @@ class ConfigTest(unittest.TestCase):
     def test_defaults_when_missing(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = config.load_config(Path(d))
-            self.assertEqual(cfg["max_body_chars"], 400)
+            self.assertEqual(cfg["max_body_chars"], 600)
             self.assertEqual(cfg["analyze_args"], ["--permission-mode", "plan"])
 
     def test_file_overrides_defaults(self):

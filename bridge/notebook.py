@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 TRUNCATE_NOTE = "\n…(已截断，全文见 detail)"
+DECISION_TAG = "【待你决策】"
 _KEY_ORDER = ["seq", "ts", "from", "to", "kind", "mode", "body", "reply_to", "detail", "status"]
 
 
@@ -37,8 +38,16 @@ class Entry:
 
 
 def truncate_body(text: str, limit: int) -> tuple[str, bool]:
+    """Cap text at `limit` chars. If it contains a 【待你决策】 section, keep that
+    section whole (it is what Codex most needs) and cut the part before it."""
     if len(text) <= limit:
         return text, False
+    idx = text.rfind(DECISION_TAG)
+    if idx > 0:
+        decision = text[idx:].rstrip()
+        room = limit - len(decision) - len(TRUNCATE_NOTE)
+        if room >= 40 and len(decision) <= limit // 2:
+            return text[:room].rstrip() + TRUNCATE_NOTE + "\n\n" + decision, True
     return text[:limit] + TRUNCATE_NOTE, True
 
 

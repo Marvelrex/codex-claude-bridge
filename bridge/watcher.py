@@ -1,6 +1,7 @@
 """Claude-side background loop: watch the notebook, run Claude, write reports."""
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -14,13 +15,17 @@ REQUIRED_TAGS = ("【做了什么】", "【结果/结论】", "【待你决策�
 KIND_LABELS = {"directive": "指示", "note": "人工备注"}
 
 
+def _flush_print(*args) -> None:
+    print(*args, flush=True)
+
+
 def detail_name(seq: int) -> str:
     return f"work/{seq:04d}-claude.md"
 
 
 class Watcher:
     def __init__(self, project_dir: Path, cfg: dict, runner: Callable = _runner.run_claude,
-                 sleep: Callable = time.sleep, log: Callable = print):
+                 sleep: Callable = time.sleep, log: Optional[Callable] = None):
         self.project_dir = Path(project_dir)
         self.bridge_dir = self.project_dir / ".bridge"
         self.cfg = cfg
@@ -28,7 +33,7 @@ class Watcher:
         self.state = State.load(self.bridge_dir)
         self.runner = runner
         self.sleep = sleep
-        self.log = log
+        self.log = log if log is not None else _flush_print
         self._last_mtime = -1.0
         (self.bridge_dir / "work").mkdir(parents=True, exist_ok=True)
 
@@ -74,7 +79,7 @@ class Watcher:
         self.state.touch()
         self.state.save(self.bridge_dir)
         self.log(f"[bridge] #{directive.seq} → claude ({mode}) 开始")
-        res = self.runner(cmd, self.project_dir, self.cfg["claude_timeout_sec"])
+        res = self._run_with_heartbeat(cmd)
 
         detail_rel = detail_name(directive.seq)
         detail_text = (
@@ -112,6 +117,28 @@ class Watcher:
         self.state.save(self.bridge_dir)
         self.log(f"[bridge] #{directive.seq} 完成 → #{out.seq} ({out.status})\a")
         return out
+
+    def _run_with_heartbeat(self, cmd: list[str]):
+        """Run Claude while a side thread keeps state.heartbeat fresh, so `bridge wait`
+        can tell 'Claude is busy' from 'watcher is dead' during long runs."""
+        stop = threading.Event()
+        interval = max(0.2, min(float(self.cfg["poll_interval_sec"]), self.cfg["heartbeat_stale_sec"] / 3))
+
+        def beat():
+            while not stop.wait(interval):
+                self.state.touch()
+                try:
+                    self.state.save(self.bridge_dir)
+                except OSError:
+                    pass  # transient (e.g. reader holding the file); next beat retries
+
+        t = threading.Thread(target=beat, daemon=True)
+        t.start()
+        try:
+            return self.runner(cmd, self.project_dir, self.cfg["claude_timeout_sec"])
+        finally:
+            stop.set()
+            t.join(timeout=5)
 
     def recover(self) -> None:
         rs = self.state.running_seq

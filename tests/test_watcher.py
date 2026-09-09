@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -122,6 +123,22 @@ class WatcherTest(EnvMixin, unittest.TestCase):
             self.assertIn("system", [e.kind for e in w.nb.read_all()])
             self.assertIsNone(w.state.running_seq)
             self.assertTrue(w.tick())
+
+    def test_heartbeat_refreshed_while_claude_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            proj, w = make(d, poll_interval_sec=0.2, heartbeat_stale_sec=1)
+            ages = []
+
+            def slow_runner(cmd, cwd, timeout):
+                time.sleep(1.5)
+                ages.append(State.load(proj / ".bridge").heartbeat_age())
+                from bridge.runner import RunResult
+                return RunResult("【做了什么】a【结果/结论】b【待你决策】无", "s", 0, False, "", "")
+            w.runner = slow_runner
+            w.nb.append("codex", "claude", "directive", "x")
+            w.tick()
+            self.assertEqual(len(ages), 1)
+            self.assertLess(ages[0], 1.0)
 
     def test_second_directive_appended_during_run_is_picked_up(self):
         with tempfile.TemporaryDirectory() as d:

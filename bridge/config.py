@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 DEFAULTS: dict = {
-    "max_body_chars": 400,
+    "max_body_chars": 600,
     "claude_timeout_sec": 1200,
     "poll_interval_sec": 1.0,
     "heartbeat_stale_sec": 30,
