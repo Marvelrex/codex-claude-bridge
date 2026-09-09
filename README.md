@@ -1,0 +1,137 @@
+# Bridge：Codex ↔ Claude 共享笔记本
+
+让交互式 **Codex CLI（主导）** 通过一个共享的追加式笔记本，指挥后台运行的 **Claude Code（执行）**。
+Codex 用量珍贵，所以它只读 Claude 的**精炼总结**；Claude 用量宽松，承担调研、改代码、跑测试等重活。
+
+```
+你 ──对话──▶ codex（交互窗口）
+                │  bridge send / bridge wait
+                ▼
+        <project>/.bridge/notebook.jsonl   ◀── 你随时 bridge note 插话
+                ▲
+                │  bridge watch（后台，自动调用 claude -p）
+             claude
+```
+
+## 环境要求
+
+- Windows 11，Python 3.12+（通过 `py` 启动器），**零第三方依赖**
+- `claude`（Claude Code CLI）和 `codex` 均已安装并登录
+
+## 安装
+
+1. 把本目录（例如 `E:\AgentsCrossPlatformFramework`）加入系统 `PATH`，这样 `bridge` 在任何终端都能用。
+   - cmd / PowerShell 会直接找到 `bridge.cmd`。
+   - Git Bash 需要一个别名：`alias bridge='/e/AgentsCrossPlatformFramework/bridge.sh'`
+2. 验证：`bridge --version`
+
+## 快速开始
+
+```bat
+:: 1. 初始化目标项目（生成 .bridge/，并把 Codex 指令注入项目的 AGENTS.md）
+bridge init --project E:\某项目
+
+:: 2. 终端 A：启动 Claude 侧监听，放着不管
+bridge watch --project E:\某项目
+
+:: 3. 终端 B：在项目目录启动 codex，像平常一样对它说任务
+cd E:\某项目
+codex
+```
+
+Codex 读到 AGENTS.md 后，会自己在合适的时候调用 `bridge send` 派活、`bridge wait` 等结果。
+你也可以直接对 Codex 说"让 Claude 去查一下 X"。
+
+## 两种 mode
+
+| mode | Claude 启动参数 | 能做什么 |
+|---|---|---|
+| `analyze`（默认） | `--permission-mode plan` | 只读：读文件、搜索、联网调研、分析 |
+| `execute` | `--permission-mode acceptEdits --allowedTools Edit,Write,Bash` | 改文件、跑命令、跑测试 |
+
+Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `config.json` 里收窄 `execute_args`，
+例如把 `Bash` 换成 `Bash(git:*),Bash(py:*)`。
+
+## 子命令
+
+| 命令 | 谁用 | 作用 |
+|---|---|---|
+| `bridge init --project <dir>` | 你 | 建 `.bridge/`，写默认 config，注入 AGENTS.md（幂等） |
+| `bridge watch --project <dir>` | 你 | Claude 侧常驻监听 |
+| `bridge send [--mode analyze\|execute] "..."` | Codex | 追加一条指示，打印 seq |
+| `bridge wait [--seq N] [--timeout 秒]` | Codex | 阻塞直到回复出现，打印 Claude 的总结 |
+| `bridge note "..."` | 你 | 人工插话，下一轮一并喂给 Claude |
+| `bridge status [-n 5]` | 你 / Codex | 最近 n 条的单行摘要 + watcher 是否存活 |
+| `bridge reset` | 你 | 清掉 Claude 的 session，让它下轮从头开始（笔记本保留） |
+
+`send / wait / note / status / reset` 不带 `--project` 时以当前目录为项目根。
+
+### `wait` 的退出码
+
+| 码 | 含义 |
+|---|---|
+| 0 | 拿到正常 report |
+| 1 | 没有可等待的指示 |
+| 2 | Claude 这一轮出错（超时 / 进程失败），正文是错误说明 |
+| 3 | watcher 没在运行（超过 `heartbeat_stale_sec` 无心跳） |
+| 4 | 等待超过 `--timeout` |
+
+## 工作区结构
+
+```
+<project>/.bridge/
+  notebook.jsonl      # 唯一事实源，一行一条，只追加
+  notebook.md         # 每次追加后自动渲染，给人看
+  state.json          # Claude session_id、last_processed、running_seq、heartbeat
+  work/0003-claude.md # 第 3 条指示的 Claude 完整过程（工具调用、中间思路、最终回复）
+  config.json         # 见下
+  claude_system.rendered.md  # 首轮注入给 Claude 的角色说明
+<project>/AGENTS.md   # 含 <!-- bridge:start --> … <!-- bridge:end --> 段
+```
+
+### 消息格式
+
+```json
+{"seq": 3, "ts": "2026-09-09T01:20:00", "from": "codex", "to": "claude",
+ "kind": "directive", "mode": "execute", "body": "...", "reply_to": null,
+ "detail": null, "status": "open"}
+```
+
+- `kind`：`directive`（Codex 指示）/ `report`（Claude 回复）/ `note`（人插话）/ `system`（框架事件）
+- `status`：`open` / `done` / `error`
+- Claude 的 `report.body` 固定三段式：`【做了什么】【结果/结论】【待你决策】`，超过
+  `max_body_chars` 由 watcher 截断，全文永远在 `detail` 文件里。
+
+### config.json
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `max_body_chars` | 600 | Claude 总结的字数上限 |
+| `claude_timeout_sec` | 1200 | 单轮 Claude 最长运行时间 |
+| `poll_interval_sec` | 1.0 | watcher 轮询间隔 |
+| `heartbeat_stale_sec` | 30 | 超过此秒数无心跳视为 watcher 未运行 |
+| `claude_bin` | `"claude"` | 可执行文件名或参数列表 |
+| `analyze_args` / `execute_args` | 见上表 | 两种 mode 的 Claude 参数 |
+| `claude_model` | null | 指定 `--model`，null 用 Claude Code 默认 |
+
+## Codex 沙箱说明
+
+Codex 默认沙箱可能会在第一次执行 `bridge send` 时请求批准，批准一次即可。
+若想长期放行，在 `~/.codex/config.toml` 的对应 profile 里把 `bridge` 加入允许的命令，
+或在启动时使用你已有的 approval 策略。`bridge` 只读写项目内 `.bridge/`，不联网。
+
+## 故障排查
+
+- **`wait` 返回 3**：终端 A 的 `bridge watch` 没在跑，或被关掉了。重新启动即可，watcher 会自动重跑上次未完成的指示。
+- **Claude 一直超时**：调大 `claude_timeout_sec`，或让 Codex 把指示拆小。
+- **Claude 回复格式跑偏**：笔记本里会出现一条 `system` 提醒；可 `bridge reset` 清 session 让它重新读角色说明。
+- **想看 Claude 到底干了什么**：打开 `.bridge/work/NNNN-claude.md`。
+
+## 开发
+
+```bat
+py -m unittest discover -s tests -v
+```
+
+设计文档：`docs/superpowers/specs/2026-09-09-codex-claude-bridge-design.md`
+真机冒烟清单：`scripts/smoke.md`

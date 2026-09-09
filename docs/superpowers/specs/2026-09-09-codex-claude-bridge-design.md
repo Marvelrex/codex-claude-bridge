@@ -58,14 +58,14 @@ README.md
 - `kind`: `directive` | `report` | `note` | `system`
 - `mode`: `analyze` | `execute`（directive 缺省 `analyze`；report 复制 directive 的 mode）
 - `status`: `open` | `done` | `error`
-- `body` 上限 `config.max_body_chars`（默认 400），超出由 watcher 截断并附注。
+- `body` 上限 `config.max_body_chars`（默认 600），超出由 watcher 截断并附注。
 - `detail`: 相对 `.bridge/` 的路径，仅 report 使用。
 
 ## 配置（config.json 默认值）
 
 ```json
 {
-  "max_body_chars": 400,
+  "max_body_chars": 600,
   "claude_timeout_sec": 1200,
   "poll_interval_sec": 1.0,
   "heartbeat_stale_sec": 30,
