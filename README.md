@@ -1,4 +1,7 @@
-# Bridge：Codex ↔ Claude 共享笔记本
+# codex-claude-bridge
+
+**Let an interactive Codex CLI session lead a background Claude Code worker through a shared, append-only notebook.**
+Codex spends tokens sparingly and only reads Claude's condensed reports; Claude does the heavy lifting (research, edits, tests) and keeps the long output out of Codex's context.
 
 让交互式 **Codex CLI（主导）** 通过一个共享的追加式笔记本，指挥后台运行的 **Claude Code（执行）**。
 Codex 用量珍贵，所以它只读 Claude 的**精炼总结**；Claude 用量宽松，承担调研、改代码、跑测试等重活。
@@ -13,34 +16,55 @@ Codex 用量珍贵，所以它只读 Claude 的**精炼总结**；Claude 用量�
              claude
 ```
 
+- **零依赖**：Python 3.12+ 标准库，一个 `bridge` 命令。
+- **只追加的 JSONL 笔记本**：格式不会被两个模型互相改坏，另有自动渲染的 `notebook.md` 给人看。
+- **每条指示可选权限**：`analyze` 只读，`execute` 可改文件跑命令。
+- **Claude 跨轮记忆**：自动 `--resume`，不必每轮重喂历史。
+- **省 Codex 用量**：Claude 的回复被限制为三段式短总结，完整过程另存文件，Codex 需要时才看。
+
 ## 环境要求
 
-- Windows 11，Python 3.12+（通过 `py` 启动器），**零第三方依赖**
-- `claude`（Claude Code CLI）和 `codex` 均已安装并登录
+- Windows 10/11（主要测试平台），Python 3.12+（通过 `py` 启动器）
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 与 [Codex CLI](https://github.com/openai/codex) 均已安装并登录
 
 ## 安装
 
-1. 把本目录（例如 `E:\AgentsCrossPlatformFramework`）加入系统 `PATH`，这样 `bridge` 在任何终端都能用。
-   - cmd / PowerShell 会直接找到 `bridge.cmd`。
-   - Git Bash 需要一个别名：`alias bridge='/e/AgentsCrossPlatformFramework/bridge.sh'`
-2. 验证：`bridge --version`
+```bat
+git clone https://github.com/<you>/codex-claude-bridge.git E:\codex-claude-bridge
+```
+
+然后让 `bridge` 命令在任何终端都可用，二选一：
+
+1. **加 PATH**：把仓库目录加入用户 PATH，cmd / PowerShell 会直接找到 `bridge.cmd`。
+   注意：已经打开的 Windows Terminal 需要整个关掉重开才能读到新 PATH。
+2. **放一个 shim**：在任意已在 PATH 里的目录（例如 `%USERPROFILE%\.local\bin`）新建 `bridge.cmd`：
+   ```bat
+   @echo off
+   setlocal
+   set "PYTHONPATH=E:\codex-claude-bridge;%PYTHONPATH%"
+   py -3 -m bridge %*
+   ```
+
+Git Bash 用户加一个别名：`alias bridge='/e/codex-claude-bridge/bridge.sh'`
+
+验证：`bridge --version`
 
 ## 快速开始
 
 ```bat
 :: 1. 初始化目标项目（生成 .bridge/，并把 Codex 指令注入项目的 AGENTS.md）
-bridge init --project E:\某项目
+bridge init --project E:\MyProject
 
 :: 2. 终端 A：启动 Claude 侧监听，放着不管
-bridge watch --project E:\某项目
+bridge watch --project E:\MyProject
 
 :: 3. 终端 B：在项目目录启动 codex，像平常一样对它说任务
-cd E:\某项目
+cd E:\MyProject
 codex
 ```
 
-Codex 读到 AGENTS.md 后，会自己在合适的时候调用 `bridge send` 派活、`bridge wait` 等结果。
-你也可以直接对 Codex 说"让 Claude 去查一下 X"。
+Codex 读到 `AGENTS.md` 后，会自己在合适的时候调用 `bridge send` 派活、`bridge wait` 等结果。
+你也可以直接对 Codex 说"这个让 Claude 去做，你只看结果"。首次执行 `bridge` 时 Codex 可能请求批准一次。
 
 ## 两种 mode
 
@@ -74,7 +98,7 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 | 1 | 没有可等待的指示 |
 | 2 | Claude 这一轮出错（超时 / 进程失败），正文是错误说明 |
 | 3 | watcher 没在运行（超过 `heartbeat_stale_sec` 无心跳） |
-| 4 | 等待超过 `--timeout` |
+| 4 | 等待超过 `--timeout`，再跑一次 `wait` 即可继续等 |
 
 ## 工作区结构
 
@@ -89,6 +113,8 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 <project>/AGENTS.md   # 含 <!-- bridge:start --> … <!-- bridge:end --> 段
 ```
 
+建议把 `.bridge/` 加进目标项目的 `.gitignore`。
+
 ### 消息格式
 
 ```json
@@ -100,7 +126,7 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 - `kind`：`directive`（Codex 指示）/ `report`（Claude 回复）/ `note`（人插话）/ `system`（框架事件）
 - `status`：`open` / `done` / `error`
 - Claude 的 `report.body` 固定三段式：`【做了什么】【结果/结论】【待你决策】`，超过
-  `max_body_chars` 由 watcher 截断，全文永远在 `detail` 文件里。
+  `max_body_chars` 由 watcher 截断（优先保留【待你决策】），全文永远在 `detail` 文件里。
 
 ### config.json
 
@@ -114,11 +140,12 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 | `analyze_args` / `execute_args` | 见上表 | 两种 mode 的 Claude 参数 |
 | `claude_model` | null | 指定 `--model`，null 用 Claude Code 默认 |
 
-## Codex 沙箱说明
+## 设计取舍
 
-Codex 默认沙箱可能会在第一次执行 `bridge send` 时请求批准，批准一次即可。
-若想长期放行，在 `~/.codex/config.toml` 的对应 profile 里把 `bridge` 加入允许的命令，
-或在启动时使用你已有的 approval 策略。`bridge` 只读写项目内 `.bridge/`，不联网。
+- **通信单向**：只有 Codex → Claude 的指示和 Claude → Codex 的回复，Claude 不能反过来下指示，避免两个模型互相喊话死循环。
+- **单 Claude 串行**：同一时间只跑一个 Claude，多条指示排队按顺序处理。
+- **没有 Web UI**：`notebook.md` 就是界面。
+- **Codex 侧不自动化**：Codex 始终是你手里的交互窗口，你随时能插手。
 
 ## 故障排查
 
@@ -126,6 +153,7 @@ Codex 默认沙箱可能会在第一次执行 `bridge send` 时请求批准，�
 - **Claude 一直超时**：调大 `claude_timeout_sec`，或让 Codex 把指示拆小。
 - **Claude 回复格式跑偏**：笔记本里会出现一条 `system` 提醒；可 `bridge reset` 清 session 让它重新读角色说明。
 - **想看 Claude 到底干了什么**：打开 `.bridge/work/NNNN-claude.md`。
+- **Codex 的 `wait` 被它自己的 shell 超时打断**：AGENTS 指令已让它用 `--timeout 240` 并在退出码 4 时重跑；仍有问题就调大 Codex 的 shell 工具超时。
 
 ## 开发
 
@@ -133,5 +161,12 @@ Codex 默认沙箱可能会在第一次执行 `bridge send` 时请求批准，�
 py -m unittest discover -s tests -v
 ```
 
-设计文档：`docs/superpowers/specs/2026-09-09-codex-claude-bridge-design.md`
-真机冒烟清单：`scripts/smoke.md`
+测试用一个假的 `claude` 脚本（`tests/fake_claude.py`）模拟 stream-json 输出，不消耗真实用量。
+
+- 设计文档：`docs/superpowers/specs/2026-09-09-codex-claude-bridge-design.md`
+- 实现计划：`docs/superpowers/plans/2026-09-09-codex-claude-bridge.md`
+- 真机冒烟清单：`scripts/smoke.md`
+
+## License
+
+MIT
