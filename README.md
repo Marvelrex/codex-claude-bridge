@@ -25,6 +25,7 @@ you ──chat──▶ codex (interactive terminal)
 - **Per-directive permissions**: `analyze` is read-only, `execute` may edit files and run commands.
 - **Claude remembers across rounds**: sessions are resumed automatically, no re-feeding history.
 - **Saves Codex tokens**: Claude's reply is capped to a short three-section summary; the full process is written to a side file that Codex reads only when needed.
+- **Built-in translation**: the `zh2en` command translates Chinese to English through the DeepL API, so agents can turn Chinese notes, directives or documents into English on demand. See [zh2en](#zh2en-deepl-translation-for-agents).
 
 ## Requirements
 

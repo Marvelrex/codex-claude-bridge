@@ -25,6 +25,7 @@ Codex 用量珍贵，所以它只读 Claude 的精炼总结；Claude 用量宽�
 - **每条指示可选权限**：`analyze` 只读，`execute` 可改文件跑命令。
 - **Claude 跨轮记忆**：自动 `--resume`，不必每轮重喂历史。
 - **省 Codex 用量**：Claude 的回复被限制为三段式短总结，完整过程另存文件，Codex 需要时才看。
+- **内置翻译**：`zh2en` 命令通过 DeepL API 把中文翻成英文，agent 可以随时把中文笔记、指示或文档转成英文。见 [zh2en](#zh2endeepl-翻译)。
 
 ## 环境要求
 
