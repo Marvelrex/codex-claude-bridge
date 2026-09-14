@@ -145,6 +145,43 @@ Consider adding `.bridge/` to the target project's `.gitignore`.
 | `analyze_args` / `execute_args` | see table above | Claude flags for the two modes |
 | `claude_model` | null | Pass `--model`; null uses Claude Code's default |
 
+## zh2en: DeepL translation for agents
+
+A standalone command in the same repo that translates Chinese text to English through the [DeepL API](https://developers.deepl.com/docs/api-reference/translate). It does not need a `.bridge/` workspace, so any agent can call it in any project. Zero dependencies.
+
+```bat
+zh2en "把这段翻成英文"          :: argument
+echo 中文 | zh2en                :: stdin
+zh2en -f notes.md                :: file
+zh2en --to EN-GB --formality more "…"
+zh2en --from auto "…"            :: let DeepL detect the source language
+```
+
+- The translation is printed to stdout as UTF-8. Errors go to stderr.
+- Key: set the `DEEPL_AUTH_KEY` environment variable, or pass `--key`. A key ending in `:fx` uses the Free endpoint, any other key uses Pro.
+- Input without Chinese characters is printed back unchanged without calling the API, so an agent can pipe everything through it. `--force` overrides this.
+- Transient errors (HTTP 429, 500, 529) are retried twice with backoff. 403 (bad key) and 456 (quota exhausted) are not retried.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | Translated (or passed through) |
+| 1 | No input text |
+| 2 | No API key |
+| 3 | DeepL rejected the key (403) or the quota is exhausted (456) |
+| 4 | Network error or timeout |
+| 5 | Other HTTP error; stderr shows DeepL's message |
+
+Make it available like `bridge`: the repo directory on PATH gives you `zh2en.cmd`; Git Bash users alias `zh2en.sh`; or drop a shim into a directory already on PATH:
+
+```bat
+@echo off
+setlocal
+set "PYTHONPATH=E:\codex-claude-bridge;%PYTHONPATH%"
+py -3 -m bridge.translate %*
+```
+
 ## Design choices
 
 - **One-directional**: only Codex → Claude directives and Claude → Codex reports. Claude never issues directives, so two models can't loop shouting at each other.

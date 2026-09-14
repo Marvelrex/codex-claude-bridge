@@ -145,6 +145,43 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 | `analyze_args` / `execute_args` | 见上表 | 两种 mode 的 Claude 参数 |
 | `claude_model` | null | 指定 `--model`，null 用 Claude Code 默认 |
 
+## zh2en：给 agent 用的 DeepL 翻译
+
+同一仓库里的独立命令，通过 [DeepL API](https://developers.deepl.com/docs/api-reference/translate) 把中文翻成英文。不依赖 `.bridge/` 工作区，任何 agent 在任何项目里都能调用。零依赖。
+
+```bat
+zh2en "把这段翻成英文"          :: 位置参数
+echo 中文 | zh2en                :: stdin
+zh2en -f notes.md                :: 文件
+zh2en --to EN-GB --formality more "…"
+zh2en --from auto "…"            :: 让 DeepL 自动识别源语言
+```
+
+- 译文以 UTF-8 打印到 stdout，错误信息走 stderr。
+- Key：设置环境变量 `DEEPL_AUTH_KEY`，或用 `--key` 传入。以 `:fx` 结尾的 key 走 Free 接口，其他走 Pro。
+- 输入里没有中文字符时原文直接输出、不调 API，agent 可以把所有文本都经它过一遍。`--force` 可强制翻译。
+- 临时性错误（HTTP 429、500、529）带退避重试两次；403（key 无效）和 456（配额用完）不重试。
+
+退出码：
+
+| 码 | 含义 |
+|---|---|
+| 0 | 已翻译（或直通） |
+| 1 | 没有输入 |
+| 2 | 没有 API key |
+| 3 | DeepL 拒绝了 key（403）或配额用完（456） |
+| 4 | 网络错误或超时 |
+| 5 | 其他 HTTP 错误，stderr 里有 DeepL 的原话 |
+
+启用方式和 `bridge` 相同：仓库目录在 PATH 上就有 `zh2en.cmd`；Git Bash 用户给 `zh2en.sh` 加别名；或者在已在 PATH 的目录放一个 shim：
+
+```bat
+@echo off
+setlocal
+set "PYTHONPATH=E:\codex-claude-bridge;%PYTHONPATH%"
+py -3 -m bridge.translate %*
+```
+
 ## 设计取舍
 
 - **通信单向**：只有 Codex → Claude 的指示和 Claude → Codex 的回复，Claude 不能反过来下指示，避免两个模型互相喊话死循环。
