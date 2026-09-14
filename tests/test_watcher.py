@@ -39,7 +39,7 @@ class WatcherTest(EnvMixin, unittest.TestCase):
             self.assertTrue(w.tick())
             rep = w.nb.read_all()[-1]
             self.assertEqual((rep.kind, rep.reply_to, rep.status, rep.mode), ("report", 1, "done", "execute"))
-            self.assertIn("【做了什么】", rep.body)
+            self.assertIn("[What I did]", rep.body)
             self.assertEqual(rep.detail, "work/0001-claude.md")
             detail = (proj / ".bridge" / rep.detail).read_text("utf-8")
             self.assertIn("run tests", detail)
@@ -72,7 +72,7 @@ class WatcherTest(EnvMixin, unittest.TestCase):
             d1 = w.nb.append("codex", "claude", "directive", "A", mode="analyze")
             n = w.nb.append("human", "claude", "note", "hint")
             p = w.build_prompt([d1, n], d1, first_round=True)
-            for needle in ("A", "hint", "analyze", str(proj), "人工备注"):
+            for needle in ("A", "hint", "analyze", str(proj), "human note"):
                 self.assertIn(needle, p)
             p2 = w.build_prompt([d1], d1, first_round=False)
             self.assertNotIn(str(proj), p2)
@@ -86,8 +86,8 @@ class WatcherTest(EnvMixin, unittest.TestCase):
                 entries = w.nb.read_all()
                 rep = [e for e in entries if e.kind == "report"][0]
                 self.assertLess(len(rep.body), 120)
-                self.assertIn("截断", rep.body)
-                self.assertTrue(any(e.kind == "system" and "格式" in e.body for e in entries))
+                self.assertIn("truncated", rep.body)
+                self.assertTrue(any(e.kind == "system" and "format" in e.body for e in entries))
         self.with_env("FAKE_CLAUDE_FINAL", "y" * 1000, go)
 
     def test_timeout_writes_system_error(self):
@@ -98,7 +98,7 @@ class WatcherTest(EnvMixin, unittest.TestCase):
                 w.tick()
                 last = w.nb.read_all()[-1]
                 self.assertEqual((last.kind, last.status, last.reply_to), ("system", "error", 1))
-                self.assertIn("超时", last.body)
+                self.assertIn("timed out", last.body)
                 self.assertEqual(State.load(proj / ".bridge").last_processed, 1)
         self.with_env("FAKE_CLAUDE_MODE", "slow", go)
 
@@ -133,7 +133,7 @@ class WatcherTest(EnvMixin, unittest.TestCase):
                 time.sleep(1.5)
                 ages.append(State.load(proj / ".bridge").heartbeat_age())
                 from bridge.runner import RunResult
-                return RunResult("【做了什么】a【结果/结论】b【待你决策】无", "s", 0, False, "", "")
+                return RunResult("[What I did] a [Result] b [Decisions for you] None", "s", 0, False, "", "")
             w.runner = slow_runner
             w.nb.append("codex", "claude", "directive", "x")
             w.tick()

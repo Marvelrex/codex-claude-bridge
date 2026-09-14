@@ -68,6 +68,7 @@ codex
 ```
 
 Once Codex reads `AGENTS.md` it will call `bridge send` to delegate work and `bridge wait` to collect the result on its own.
+Claude replies in three fixed sections, `[What I did]`, `[Result]`, `[Decisions for you]`, so Codex can act on the summary directly.
 You can also tell Codex directly: "Have Claude do this, you just review the result." Codex may ask you to approve the first `bridge` command.
 
 ## The two modes
@@ -129,7 +130,7 @@ Consider adding `.bridge/` to the target project's `.gitignore`.
 
 - `kind`: `directive` (from Codex) / `report` (from Claude) / `note` (human) / `system` (framework event)
 - `status`: `open` / `done` / `error`
-- Claude's `report.body` always has three sections: *what I did / result / decisions for you*. Anything beyond
+- Claude's `report.body` always has three sections: `[What I did]`, `[Result]`, `[Decisions for you]`. Anything beyond
   `max_body_chars` is truncated by the watcher (the decision section is preserved first); the full text is always in the `detail` file.
 
 ### config.json
@@ -170,10 +171,6 @@ Tests use a fake `claude` script (`tests/fake_claude.py`) that emits canned stre
 - Design doc: `docs/superpowers/specs/2026-09-09-codex-claude-bridge-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-09-09-codex-claude-bridge.md`
 - Real-machine smoke checklist: `scripts/smoke.md`
-
-## Note on language
-
-The CLI messages, the role prompt given to Claude and the AGENTS.md section injected for Codex are currently written in Chinese, since the tool was built for a Chinese-speaking workflow. The notebook format and all identifiers are language-neutral.
 
 ## License
 

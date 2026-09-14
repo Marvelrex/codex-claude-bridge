@@ -129,8 +129,9 @@ Codex 在每条指示上指定：`bridge send --mode execute "..."`。可在 `co
 
 - `kind`：`directive`（Codex 指示）/ `report`（Claude 回复）/ `note`（人插话）/ `system`（框架事件）
 - `status`：`open` / `done` / `error`
-- Claude 的 `report.body` 固定三段式：`【做了什么】【结果/结论】【待你决策】`，超过
-  `max_body_chars` 由 watcher 截断（优先保留【待你决策】），全文永远在 `detail` 文件里。
+- Claude 的 `report.body` 固定三段式：`[What I did]`、`[Result]`、`[Decisions for you]`，超过
+  `max_body_chars` 由 watcher 截断（优先保留 `[Decisions for you]` 段），全文永远在 `detail` 文件里。
+- CLI 提示、Claude 的角色说明和注入 Codex 的 AGENTS 段均为英文。
 
 ### config.json
 

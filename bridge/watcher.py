@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from bridge import runner as _runner
-from bridge.notebook import Entry, Notebook, truncate_body
+from bridge.notebook import DECISION_TAG, Entry, Notebook, truncate_body
 from bridge.state import State
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-REQUIRED_TAGS = ("【做了什么】", "【结果/结论】", "【待你决策】")
-KIND_LABELS = {"directive": "指示", "note": "人工备注"}
+REQUIRED_TAGS = ("[What I did]", "[Result]", DECISION_TAG)
+KIND_LABELS = {"directive": "directive", "note": "human note"}
 
 
 def _flush_print(*args) -> None:
@@ -41,16 +41,17 @@ class Watcher:
     def build_prompt(self, entries: list[Entry], directive: Entry, first_round: bool) -> str:
         parts = []
         if first_round:
-            parts.append(f"项目目录：{self.project_dir}\n以下是共享笔记本中的新条目。")
+            parts.append(f"Project directory: {self.project_dir}\nNew entries from the shared notebook:")
         else:
-            parts.append("共享笔记本有新条目：")
+            parts.append("New entries in the shared notebook:")
         for e in entries:
             tag = KIND_LABELS.get(e.kind, e.kind)
-            mode = f"（mode: {e.mode}）" if e.mode else ""
-            parts.append(f"\n--- #{e.seq} {tag}{mode} 来自 {e.from_} ---\n{e.body}")
+            mode = f" (mode: {e.mode})" if e.mode else ""
+            parts.append(f"\n--- #{e.seq} {tag}{mode} from {e.from_} ---\n{e.body}")
         parts.append(
-            f"\n本轮 mode = {directive.mode or 'analyze'}。请按角色说明执行，"
-            f"最后一段回复用三段式，不超过 {self.cfg['max_body_chars']} 字。"
+            f"\nThis round's mode = {directive.mode or 'analyze'}. Follow your role instructions. "
+            f"Your final message must use the three-section format and stay under "
+            f"{self.cfg['max_body_chars']} characters."
         )
         return "\n".join(parts)
 
@@ -78,35 +79,37 @@ class Watcher:
         self.state.running_seq = directive.seq
         self.state.touch()
         self.state.save(self.bridge_dir)
-        self.log(f"[bridge] #{directive.seq} → claude ({mode}) 开始")
+        self.log(f"[bridge] #{directive.seq} → claude ({mode}) started")
         res = self._run_with_heartbeat(cmd)
 
         detail_rel = detail_name(directive.seq)
         detail_text = (
-            f"# #{directive.seq} Claude 过程记录（mode={mode}）\n\n"
-            f"## 指示\n\n{directive.body}\n\n## 过程\n\n{res.detail_md}\n\n"
-            f"## 最终回复\n\n{res.text}\n"
+            f"# #{directive.seq} Claude process log (mode={mode})\n\n"
+            f"## Directive\n\n{directive.body}\n\n## Process\n\n{res.detail_md}\n\n"
+            f"## Final reply\n\n{res.text}\n"
         )
         (self.bridge_dir / detail_rel).write_text(detail_text, "utf-8")
 
         if res.timed_out:
             out = self.nb.append(
                 "bridge", "codex", "system",
-                f"Claude 超时（{self.cfg['claude_timeout_sec']}s），已终止。部分过程见 detail。",
+                f"Claude timed out after {self.cfg['claude_timeout_sec']}s and was terminated. "
+                f"Partial process is in the detail file.",
                 mode=mode, reply_to=directive.seq, detail=detail_rel, status="error")
         elif res.exit_code != 0 and not res.text:
             err = "\n".join(res.stderr.strip().splitlines()[:20]) or f"exit code {res.exit_code}"
             out = self.nb.append(
-                "bridge", "codex", "system", f"Claude 运行失败：\n{err}",
+                "bridge", "codex", "system", f"Claude failed to run:\n{err}",
                 mode=mode, reply_to=directive.seq, detail=detail_rel, status="error")
         else:
-            text = res.text.strip() or "(Claude 没有输出)"
+            text = res.text.strip() or "(Claude produced no output)"
             body, _cut = truncate_body(text, self.cfg["max_body_chars"])
             out = self.nb.append("claude", "codex", "report", body, mode=mode,
                                  reply_to=directive.seq, detail=detail_rel, status="done")
             if not all(t in res.text for t in REQUIRED_TAGS):
                 self.nb.append("bridge", "human", "system",
-                               f"#{out.seq} 的回复不符合三段式格式（或为空），请查看 detail。",
+                               f"Reply #{out.seq} does not follow the three-section format "
+                               f"(or is empty). See the detail file.",
                                status="done")
 
         if res.session_id:
@@ -115,7 +118,7 @@ class Watcher:
         self.state.running_seq = None
         self.state.touch()
         self.state.save(self.bridge_dir)
-        self.log(f"[bridge] #{directive.seq} 完成 → #{out.seq} ({out.status})\a")
+        self.log(f"[bridge] #{directive.seq} finished → #{out.seq} ({out.status})\a")
         return out
 
     def _run_with_heartbeat(self, cmd: list[str]):
@@ -146,7 +149,8 @@ class Watcher:
             return
         if self.nb.find_reply(rs) is None:
             self.nb.append("bridge", "human", "system",
-                           f"watcher 重启：#{rs} 上次未完成，将重跑。", status="done")
+                           f"Watcher restarted: #{rs} did not finish last time and will be re-run.",
+                           status="done")
         self.state.running_seq = None
         self.state.save(self.bridge_dir)
 
@@ -166,10 +170,10 @@ class Watcher:
 
     def loop(self) -> None:
         self.recover()
-        self.log(f"[bridge] watching {self.nb.path}  (Ctrl+C 退出)")
+        self.log(f"[bridge] watching {self.nb.path}  (Ctrl+C to stop)")
         try:
             while True:
                 if not self.tick():
                     self.sleep(self.cfg["poll_interval_sec"])
         except KeyboardInterrupt:
-            self.log("[bridge] 已停止")
+            self.log("[bridge] stopped")

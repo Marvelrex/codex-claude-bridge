@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-TRUNCATE_NOTE = "\n…(已截断，全文见 detail)"
-DECISION_TAG = "【待你决策】"
+TRUNCATE_NOTE = "\n…(truncated; full text in the detail file)"
+DECISION_TAG = "[Decisions for you]"
 _KEY_ORDER = ["seq", "ts", "from", "to", "kind", "mode", "body", "reply_to", "detail", "status"]
 
 
@@ -38,7 +38,7 @@ class Entry:
 
 
 def truncate_body(text: str, limit: int) -> tuple[str, bool]:
-    """Cap text at `limit` chars. If it contains a 【待你决策】 section, keep that
+    """Cap text at `limit` chars. If it contains a [Decisions for you] section, keep that
     section whole (it is what Codex most needs) and cut the part before it."""
     if len(text) <= limit:
         return text, False
@@ -62,7 +62,7 @@ def render_markdown(entries: list[Entry]) -> str:
         out.append(e.body)
         out.append("")
         if e.detail:
-            out.append(f"详情：[{e.detail}]({e.detail})")
+            out.append(f"Detail: [{e.detail}]({e.detail})")
             out.append("")
     return "\n".join(out)
 

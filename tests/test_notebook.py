@@ -64,16 +64,16 @@ class NotebookTest(unittest.TestCase):
         self.assertEqual((s2, cut2), ("short", False))
 
     def test_truncate_keeps_decision_section(self):
-        text = "【做了什么】" + "a" * 300 + "\n【结果/结论】" + "b" * 300 + "\n【待你决策】要不要升级依赖？"
+        text = "[What I did] " + "a" * 300 + "\n[Result] " + "b" * 300 + "\n[Decisions for you] Upgrade the dependency?"
         s, cut = truncate_body(text, 200)
         self.assertTrue(cut)
         self.assertLessEqual(len(s), 200 + 5)
-        self.assertTrue(s.endswith("【待你决策】要不要升级依赖？"))
-        self.assertIn("截断", s)
-        self.assertTrue(s.startswith("【做了什么】"))
+        self.assertTrue(s.endswith("[Decisions for you] Upgrade the dependency?"))
+        self.assertIn("truncated", s)
+        self.assertTrue(s.startswith("[What I did]"))
 
     def test_truncate_falls_back_when_decision_too_long(self):
-        text = "x" * 100 + "【待你决策】" + "y" * 500
+        text = "x" * 100 + "[Decisions for you] " + "y" * 500
         s, cut = truncate_body(text, 100)
         self.assertTrue(cut)
         self.assertTrue(s.startswith("x" * 100))

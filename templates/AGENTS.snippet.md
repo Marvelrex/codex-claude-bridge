@@ -1,23 +1,23 @@
 <!-- bridge:start -->
-## Bridge：你有一个执行助手 Claude
+## Bridge: you have a worker named Claude
 
-你是本项目的主导者。有一个助手 Claude 通过命令行随时待命，它擅长深入调研和执行繁重任务，用量不受限制。
-**你的用量珍贵**：凡是要读大量文件、跑测试、查资料、写长代码、反复试错的活，都交给 Claude，你只做决策和审核。
+You are the lead on this project. A worker, Claude, is on call through the command line. It is good at deep research and heavy execution, and its usage is not a concern.
+**Your usage is scarce**: anything that means reading many files, running tests, looking things up, writing long code or iterating through trial and error goes to Claude. You decide and review.
 
-### 怎么用
-- 派活：`bridge send --mode analyze "指示"` 或 `bridge send --mode execute "指示"`，命令会打印一个 seq。
-  - `analyze`：Claude 只读，适合调研、分析、评审。
-  - `execute`：Claude 可改文件、跑命令，适合实现、修 bug、跑测试。
-- 等结果：`bridge wait --timeout 240`（默认等最新一条指示的回复），返回的文本就是 Claude 的总结，格式固定为
-  【做了什么】【结果/结论】【待你决策】。直接依据它决策。
-  - Claude 一轮通常要 1–10 分钟。运行 `wait` 时把你的 shell 工具超时设到 300 秒以上。
-  - 退出码 4 = 还没好，直接再跑一次 `bridge wait --timeout 240`；退出码 2 = Claude 这一轮出错，正文是原因。
-- 回顾：`bridge status -n 5` 看最近几条的单行摘要和 Claude 是否在跑。
-- 只在总结不够用时，才读 `.bridge/work/NNNN-claude.md` 看完整过程。平时不要读它，也不要读 `.bridge/notebook.jsonl` 全文。
+### How to use it
+- Delegate: `bridge send --mode analyze "directive"` or `bridge send --mode execute "directive"`. The command prints a seq number.
+  - `analyze`: Claude is read-only. Use for research, analysis, review.
+  - `execute`: Claude may edit files and run commands. Use for implementation, bug fixes, running tests.
+- Collect the result: `bridge wait --timeout 240` (waits for the reply to the latest directive by default). The text it prints is Claude's summary, always in three sections:
+  [What I did] [Result] [Decisions for you]. Decide directly from it.
+  - A Claude round usually takes 1 to 10 minutes. Set your shell tool timeout to at least 300 seconds when running `wait`.
+  - Exit code 4 means not finished yet: run `bridge wait --timeout 240` again. Exit code 2 means Claude's round failed; the body says why.
+- Review: `bridge status -n 5` shows a one-line digest of recent entries and whether Claude is running.
+- Read `.bridge/work/NNNN-claude.md` for the full process only when the summary is not enough. Do not read it routinely, and do not read `.bridge/notebook.jsonl` in full.
 
-### 给 Claude 写指示的要点
-- 写清目标、边界（哪些文件/接口不能动）、你想要的产出形式。
-- 一条指示只做一件事；大任务拆成多条，逐条 `send` → `wait`。
-- 需要 Claude 先调研再动手时，先发一条 `analyze`，看完结论再发 `execute`。
-- `wait` 若报"watcher 未运行"，告诉用户去另一个终端启动 `bridge watch`，不要自己重试。
+### Writing good directives
+- State the goal, the boundaries (files or interfaces that must not change) and the form of output you want.
+- One directive does one thing. Split large tasks into several directives, `send` then `wait` for each.
+- When Claude should investigate before acting, send an `analyze` directive first, read the conclusion, then send `execute`.
+- If `wait` reports that the watcher is not running, tell the user to start `bridge watch` in another terminal. Do not retry on your own.
 <!-- bridge:end -->

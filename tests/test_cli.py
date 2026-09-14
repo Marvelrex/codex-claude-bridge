@@ -101,23 +101,23 @@ class WaitTest(unittest.TestCase):
 
         def later():
             time.sleep(0.7)
-            Notebook(self.b).append("claude", "codex", "report", "【做了什么】x", reply_to=1,
+            Notebook(self.b).append("claude", "codex", "report", "[What I did] x", reply_to=1,
                                     detail="work/0001-claude.md", status="done")
         t = threading.Thread(target=later)
         t.start()
         code, out = run("wait", "--project", str(self.proj), "--timeout", "10")
         t.join()
         self.assertEqual(code, 0)
-        self.assertIn("【做了什么】x", out)
+        self.assertIn("[What I did] x", out)
         self.assertIn("work/0001-claude.md", out)
 
     def test_wait_error_reply_exit_2(self):
         run("send", "--project", str(self.proj), "do")
         self._alive()
-        Notebook(self.b).append("bridge", "codex", "system", "超时", reply_to=1, status="error")
+        Notebook(self.b).append("bridge", "codex", "system", "timed out", reply_to=1, status="error")
         code, out = run("wait", "--project", str(self.proj))
         self.assertEqual(code, 2)
-        self.assertIn("超时", out)
+        self.assertIn("timed out", out)
 
     def test_wait_specific_seq(self):
         run("send", "--project", str(self.proj), "one")

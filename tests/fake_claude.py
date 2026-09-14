@@ -24,7 +24,7 @@ if mode == "fail":
 
 final = os.environ.get(
     "FAKE_CLAUDE_FINAL",
-    "【做了什么】ran tests\n【结果/结论】all green\n【待你决策】无",
+    "[What I did] ran tests\n[Result] all green\n[Decisions for you] None",
 )
 events = [
     {"type": "system", "subtype": "init", "session_id": "sess-123"},

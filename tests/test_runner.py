@@ -69,7 +69,7 @@ class RunClaudeTest(unittest.TestCase):
             self.assertEqual(r.exit_code, 0)
             self.assertFalse(r.timed_out)
             self.assertEqual(r.session_id, "sess-123")
-            self.assertIn("【做了什么】", r.text)
+            self.assertIn("[What I did]", r.text)
             self.assertIn("py -m unittest", r.detail_md)
 
     def test_timeout(self):

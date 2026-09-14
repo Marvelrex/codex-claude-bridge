@@ -28,7 +28,7 @@ def resolve_project(arg) -> Path:
 def bridge_dir_of(project: Path) -> Path:
     b = project / ".bridge"
     if not b.exists():
-        print(f'错误：{project} 下没有 .bridge/，先运行：bridge init --project "{project}"')
+        print(f'Error: no .bridge/ under {project}. Run first: bridge init --project "{project}"')
         raise SystemExit(1)
     return b
 
@@ -59,10 +59,10 @@ def cmd_init(a) -> int:
         nb.path.touch()
     nb.render()
     splice_agents_md(project)
-    print(f"已初始化 {b}")
-    print("下一步：")
-    print(f'  1) 另开一个终端常驻：bridge watch --project "{project}"')
-    print(f"  2) 在 {project} 里启动 codex，正常对它说任务即可")
+    print(f"Initialised {b}")
+    print("Next:")
+    print(f'  1) In a separate terminal, keep this running: bridge watch --project "{project}"')
+    print(f"  2) Start codex inside {project} and talk to it as usual")
     return 0
 
 
@@ -91,7 +91,7 @@ def cmd_status(a) -> int:
         print(f"#{e.seq} {e.ts[11:16]} {e.from_}→{e.to} {e.kind}{mode} {e.status}  {first}")
     age = st.heartbeat_age()
     alive = age < cfg["heartbeat_stale_sec"]
-    age_s = f"{int(age)}s" if st.heartbeat else "从未"
+    age_s = f"{int(age)}s" if st.heartbeat else "never"
     running = f"#{st.running_seq}" if st.running_seq else "-"
     print(f"watcher: {'alive' if alive else 'stale'} ({age_s})   claude running: {running}   "
           f"session: {st.session_id or '-'}")
@@ -103,7 +103,7 @@ def cmd_reset(a) -> int:
     st = State.load(b)
     st.session_id = None
     st.save(b)
-    print("已清除 Claude session，下一轮从头开始（笔记本保留）。")
+    print("Claude session cleared. The next round starts fresh (notebook kept).")
     return 0
 
 
@@ -117,12 +117,12 @@ def cmd_watch(a) -> int:
     if isinstance(bin_, str):
         exe = shutil.which(bin_)
         if not exe:
-            print(f"错误：找不到 {bin_}，请确认 Claude Code 已安装并在 PATH 中。")
+            print(f"Error: {bin_} not found. Make sure Claude Code is installed and on PATH.")
             return 1
         try:
             subprocess.run([exe, "--version"], capture_output=True, timeout=60, check=True)
         except Exception as ex:  # noqa: BLE001 - report anything, then exit
-            print(f"错误：claude --version 失败：{ex}")
+            print(f"Error: claude --version failed: {ex}")
             return 1
     Watcher(project, cfg).loop()
     return 0
@@ -135,7 +135,7 @@ def cmd_wait(a) -> int:
     if seq is None:
         ds = [e for e in nb.read_all() if e.kind == "directive" and e.to == "claude"]
         if not ds:
-            print("没有可等待的指示，先 bridge send。")
+            print("Nothing to wait for. Run bridge send first.")
             return WAIT_NO_DIRECTIVE
         seq = ds[-1].seq
     timeout = a.timeout if a.timeout is not None else cfg["claude_timeout_sec"] + 60
@@ -145,15 +145,16 @@ def cmd_wait(a) -> int:
         if r is not None:
             print(r.body)
             if r.detail:
-                print(f"\n详情：.bridge/{r.detail}")
+                print(f"\nDetail: .bridge/{r.detail}")
             return WAIT_DONE if r.status == "done" else WAIT_ERROR_REPLY
         st = State.load(b)
         if st.heartbeat_age() > cfg["heartbeat_stale_sec"]:
-            age_s = f"{int(st.heartbeat_age())}s 无心跳" if st.heartbeat else "从未启动"
-            print(f'watcher 未运行（{age_s}）。请让用户在另一个终端启动：bridge watch --project "{b.parent}"')
+            age_s = f"no heartbeat for {int(st.heartbeat_age())}s" if st.heartbeat else "never started"
+            print(f'The watcher is not running ({age_s}). Ask the user to start it in another terminal: '
+                  f'bridge watch --project "{b.parent}"')
             return WAIT_NO_WATCHER
         if time.time() - start > timeout:
-            print(f"等待 #{seq} 超过 {int(timeout)}s，放弃。稍后可用 bridge wait --seq {seq} 再等。")
+            print(f"Waited more than {int(timeout)}s for #{seq}. Run bridge wait --seq {seq} to keep waiting.")
             return WAIT_TIMEOUT
         if time.time() - last_dot >= 10:
             print(".", end="", file=sys.stderr, flush=True)
@@ -164,29 +165,31 @@ def cmd_wait(a) -> int:
 # ---- parser -------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="bridge", description="Codex ↔ Claude 共享笔记本桥")
+    p = argparse.ArgumentParser(prog="bridge", description="Shared-notebook bridge between Codex and Claude")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def add(name, help_, fn):
         sp = sub.add_parser(name, help=help_)
-        sp.add_argument("--project", help="项目目录（默认当前目录）")
+        sp.add_argument("--project", help="project directory (default: current directory)")
         sp.set_defaults(fn=fn)
         return sp
 
-    add("init", "初始化项目的 .bridge/ 并注入 AGENTS.md", cmd_init)
-    add("watch", "Claude 侧后台监听（常驻）", cmd_watch)
-    s = add("send", "Codex 给 Claude 下指示", cmd_send)
-    s.add_argument("--mode", choices=MODES, default="analyze", help="analyze=只读，execute=可改文件跑命令")
-    s.add_argument("body", help="指示内容")
-    s = add("wait", "等待 Claude 的回复并打印", cmd_wait)
-    s.add_argument("--seq", type=int, help="等待哪条指示的回复（默认最新一条）")
-    s.add_argument("--timeout", type=float, default=None, help="秒；默认 = config.claude_timeout_sec + 60")
-    s = add("note", "人工插话给 Claude", cmd_note)
-    s.add_argument("body", help="备注内容")
-    s = add("status", "最近几条摘要 + watcher 状态", cmd_status)
-    s.add_argument("-n", type=int, default=5, help="显示最近 n 条，0 表示全部")
-    add("reset", "清除 Claude session，下一轮从头开始", cmd_reset)
+    add("init", "create .bridge/ in a project and inject the AGENTS.md section", cmd_init)
+    add("watch", "run the Claude-side watcher (long-running)", cmd_watch)
+    s = add("send", "Codex sends a directive to Claude", cmd_send)
+    s.add_argument("--mode", choices=MODES, default="analyze",
+                   help="analyze = read-only, execute = may edit files and run commands")
+    s.add_argument("body", help="directive text")
+    s = add("wait", "wait for Claude's reply and print it", cmd_wait)
+    s.add_argument("--seq", type=int, help="directive seq to wait for (default: latest)")
+    s.add_argument("--timeout", type=float, default=None,
+                   help="seconds; default = config.claude_timeout_sec + 60")
+    s = add("note", "human interjection for Claude", cmd_note)
+    s.add_argument("body", help="note text")
+    s = add("status", "digest of recent entries + watcher state", cmd_status)
+    s.add_argument("-n", type=int, default=5, help="show the last n entries, 0 for all")
+    add("reset", "clear Claude's session so the next round starts fresh", cmd_reset)
     return p
 
 
