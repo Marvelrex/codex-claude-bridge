@@ -30,7 +30,7 @@ Codex 用量珍贵，所以它只读 Claude 的**精炼总结**；Claude 用量�
 ## 安装
 
 ```bat
-git clone https://github.com/<you>/codex-claude-bridge.git E:\codex-claude-bridge
+git clone https://github.com/Marvelrex/codex-claude-bridge.git E:\codex-claude-bridge
 ```
 
 然后让 `bridge` 命令在任何终端都可用，二选一：
